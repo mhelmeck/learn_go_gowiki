@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"errors"
 	"log"
 	"net/http"
 	"regexp"
@@ -17,6 +17,10 @@ var templates = template.Must(template.ParseFiles("edit.html", "view.html"))
 
 var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
 
+var pages = []*Page{
+	{Title: "Pierwsza", Body: []byte("Opis")},
+}
+
 func main() {
 	http.HandleFunc("/view/", makeHandler(viewHandler))
 	http.HandleFunc("/edit/", makeHandler(editHandler))
@@ -26,25 +30,48 @@ func main() {
 }
 
 // Page methods
-func (p *Page) save() error {
-	filename := p.Title + ".txt"
+// func (p *Page) save() error {
+// 	filename := p.Title + ".txt"
 
-	return ioutil.WriteFile(filename, p.Body, 0600)
-}
+// 	return ioutil.WriteFile(filename, p.Body, 0600)
+// }
 
-func loadPage(title string) (*Page, error) {
-	filename := title + ".txt"
-	body, err := ioutil.ReadFile(filename)
+func (p *Page) saveLocal() error {
+	existing, err := loadLoocal(p.Title)
 	if err != nil {
-		return nil, err
+		pages = append(pages, p)
+		return nil
 	}
 
-	return &Page{Title: title, Body: body}, nil
+	existing.Title = p.Title
+	existing.Body = p.Body
+
+	return nil
+}
+
+// func loadPage(title string) (*Page, error) {
+// 	filename := title + ".txt"
+// 	body, err := ioutil.ReadFile(filename)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	return &Page{Title: title, Body: body}, nil
+// }
+
+func loadLoocal(title string) (*Page, error) {
+	for _, page := range pages {
+		if page.Title == title {
+			return page, nil
+		}
+	}
+
+	return nil, errors.New("Not found")
 }
 
 // Api methods
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
-	p, err := loadPage(title)
+	p, err := loadLoocal(title)
 	if err != nil {
 		http.Redirect(w, r, "/edit/"+title, http.StatusFound)
 		return
@@ -54,7 +81,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 }
 
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
-	p, err := loadPage(title)
+	p, err := loadLoocal(title)
 	if err != nil {
 		p = &Page{Title: title}
 	}
@@ -66,7 +93,7 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	body := r.FormValue("body")
 	p := &Page{Title: title, Body: []byte(body)}
 
-	err := p.save()
+	err := p.saveLocal()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
